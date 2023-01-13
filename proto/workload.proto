@@ -46,6 +46,30 @@ message X509SVID {
     repeated string federates_with = 5;
 }
 
+message JWTSVIDRequest {
+    // Required. The audience(s) the workload intends to authenticate against.
+    repeated string audience = 1;
+
+    // Optional. The requested SPIFFE ID for the JWT-SVID. If unset, all
+    // JWT-SVIDs to which the workload is entitled are requested.
+    string spiffe_id = 2;
+}
+
+// The JWTSVIDResponse message conveys JWT-SVIDs.
+message JWTSVIDResponse {
+    // Required. The list of returned JWT-SVIDs.
+    repeated JWTSVID svids = 1;
+}
+
+// The JWTSVID message carries the JWT-SVID token and associated metadata.
+message JWTSVID {
+    // Required. The SPIFFE ID of the JWT-SVID.
+    string spiffe_id = 1;
+
+    // Required. Encoded JWT using JWS Compact Serialization.
+    string svid = 2;
+}
+
 message JWTBundlesRequest { }
 
 message JWTBundlesResponse {
@@ -62,4 +86,10 @@ service SpiffeWorkloadAPI {
     // well as related information like trust bundles and CRLs. As
     // this information changes, subsequent messages will be sent.
     rpc FetchX509SVID(X509SVIDRequest) returns (stream X509SVIDResponse);
+
+    
+    // Fetch JWT-SVIDs for all SPIFFE identities the workload is entitled to,
+    // for the requested audience. If an optional SPIFFE ID is requested, only
+    // the JWT-SVID for that SPIFFE ID is returned.
+    rpc FetchJWTSVID(JWTSVIDRequest) returns (JWTSVIDResponse);
 }

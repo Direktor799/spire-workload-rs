@@ -8,7 +8,7 @@ use futures::future::Either;
 use futures::{Stream, StreamExt};
 use log::*;
 use rustls::Certificate;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::{
     collections::HashMap,
     pin::Pin,
@@ -87,6 +87,10 @@ struct JwtBundleContainer {
     keys: JwtBundle,
 }
 
+lazy_static! {
+    pub static ref API_CLIENTS: Mutex<Vec<ApiClient>> = Mutex::new(Vec::new());
+}
+
 async fn run_spire() -> Result<()> {
     let unix_file = std::env::var("SPIRE_WORKLOAD_URL")
         .unwrap_or_else(|_| "/opt/spire/agent/sockets/agent.sock".to_string());
@@ -116,6 +120,7 @@ async fn run_spire() -> Result<()> {
     }
 
     let client_len = clients.len();
+    *API_CLIENTS.lock().unwrap() = clients;
 
     let unix_files_inner = unix_files.clone();
     let handle_x509: tokio::task::JoinHandle<Result<()>> = tokio::spawn(async move {
@@ -196,4 +201,29 @@ pub(super) async fn spire_manager() {
         }
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
     }
+}
+
+pub async fn fetch_jwtsvid(spiffe_id: Option<SpiffeID>) -> Vec<Jwtsvid> {
+    let mut clients = API_CLIENTS.lock().unwrap();
+    let mut svids = vec![];
+    for client in &mut *clients {
+        let mut request = tonic::Request::new(JwtsvidRequest {
+            audience: vec!["zti".to_string()],
+            spiffe_id: spiffe_id
+                .as_ref()
+                .map(|spiffe| spiffe.to_string())
+                .unwrap_or_default(),
+        });
+        request.metadata_mut().insert(
+            "workload.spiffe.io",
+            tonic::metadata::AsciiMetadataValue::from_str("true").unwrap(),
+        );
+        match client.fetch_jwtsvid(request).await {
+            Ok(resp) => svids.extend(resp.into_inner().svids),
+            Err(e) => {
+                error!("{}", e)
+            }
+        }
+    }
+    svids
 }

@@ -17,6 +17,7 @@ mod workload;
 pub use authenticator::SpiffeIdAuthorizer;
 pub use jwt::{JwtBundle, JwtKey};
 pub use spiffe::{SpiffeID, SpiffeIDMatcher};
+use spire::fetch_jwtsvid;
 
 use crate::der::parse_der_cert_chain;
 use anyhow::*;
@@ -177,4 +178,12 @@ pub fn make_server_config(
     config.set_protocols(protocols);
 
     config
+}
+
+pub async fn get_jwt_tokens(spiffe_id: Option<SpiffeID>) -> Vec<String> {
+    fetch_jwtsvid(spiffe_id)
+        .await
+        .into_iter()
+        .map(|svid| svid.svid)
+        .collect()
 }
